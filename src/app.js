@@ -16,8 +16,7 @@ const app = express();
 // Set up security and standard middleware
 app.use(helmet());
 app.use(cors({
-    origin:  "*", // Prefer a default value over a wildcard
-    // origin: process.env.FRONTEND_URL || "https://localhost:3000", // Prefer a default value over a wildcard
+    origin: process.env.FRONTEND_URL || "https://localhost:3000", // Prefer a default value over a wildcard
     credentials: true,
     methods: ["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
     allowedHeaders: ["Content-Type", "Authorization"],
