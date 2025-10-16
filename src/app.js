@@ -4,7 +4,7 @@ import cors from "cors";
 import morgan from "morgan";
 import cookieParser from "cookie-parser";
 import compression from "compression";
-import rateLimit from "express-rate-limit"; // Ensure rateLimit is installed
+// import rateLimit from "express-rate-limit"; // Ensure rateLimit is installed
 // Import route modules
 import authRoutes from "./routes/auth.routes.js";
 import articleRoutes from "./routes/article.routes.js";
@@ -29,13 +29,13 @@ app.use(express.urlencoded({ extended: true })); // Add body parser for URL-enco
 // Note: This filter is unnecessary as `compression` already handles HTTP status codes.
 app.use(compression());
 // Set up rate limiting
-app.use(rateLimit({
-    windowMs: 15 * 60 * 1000, // 15 minutes
-    max: 500, // Max 500 requests per 15 minutes
-    message: "Too many requests from this IP, please try again after 15 minutes",
-    standardHeaders: true, // Return rate limit info in the `RateLimit-*` headers
-    legacyHeaders: false, // Disable the `X-RateLimit-*` headers
-}));
+// app.use(rateLimit({
+//     windowMs: 15 * 60 * 1000, // 15 minutes
+//     max: 500, // Max 500 requests per 15 minutes
+//     message: "Too many requests from this IP, please try again after 15 minutes",
+//     standardHeaders: true, // Return rate limit info in the `RateLimit-*` headers
+//     legacyHeaders: false, // Disable the `X-RateLimit-*` headers
+// }));
 // Health check route
 app.get("/health", (_req, res) => {
     res.json({ status: "ok", timestamp: new Date() });
