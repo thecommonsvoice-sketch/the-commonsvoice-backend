@@ -1,5 +1,5 @@
 import express from "express";
-import { fetchLatestNews, getCachedNews } from "../controllers/newControllers.js";
+import { fetchLatestNews, getCachedNews } from "../controllers/newsControllers.js";
 
 const router = express.Router();
 
