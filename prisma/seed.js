@@ -1,4 +1,4 @@
-import { PrismaClient, Role, ArticleStatus } from '@prisma/client'
+import { PrismaClient } from '@prisma/client'
 import { faker } from '@faker-js/faker'
 
 const prisma = new PrismaClient()
@@ -14,7 +14,7 @@ async function main() {
       email: 'reporter@example.com',
       password: 'reporterpassword', // hash in real apps
       name: faker.person.fullName(),
-      role: Role.REPORTER,
+      role: 'REPORTER', // Enum as string
     },
   })
 
@@ -58,7 +58,7 @@ async function main() {
         excerpt,
         metaTitle,
         metaDescription,
-        status: ArticleStatus.PUBLISHED,
+        status: 'PUBLISHED', // Enum as string
         authorId: reporter.id,
         categoryId: randomCategory.id,
         coverImage: faker.image.urlPicsumPhotos({ width: 800, height: 600 }),

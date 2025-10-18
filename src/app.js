@@ -12,6 +12,7 @@ import categoryRoutes from "./routes/category.routes.js";
 import adminRoutes from "./routes/adminRoutes.js"; // Correct file naming to be consistent
 import commentRoutes from "./routes/comment.routes.js";
 import bookmarkRoutes from "./routes/bookmark.routes.js";
+import newsRouter from "./routes/newsRoute.js";
 const app = express();
 // Set up security and standard middleware
 app.use(helmet());
@@ -47,5 +48,6 @@ app.use("/api/categories", categoryRoutes);
 app.use("/api/admin", adminRoutes);
 app.use("/api/comments", commentRoutes);
 app.use("/api/bookmarks", bookmarkRoutes);
+app.use("/api", newsRouter);
 // Export the configured Express app
 export default app;
