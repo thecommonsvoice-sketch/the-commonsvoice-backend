@@ -126,7 +126,7 @@ export async function fetchNewsByCategory(category) {
       });
     }
 
-    return { success: true, count: articles.length };
+    return { success: true, count: articles.length,articles };
   } catch (error) {
     console.error("Cron fetch failed:", error);
     return { success: false, error: error.message };
