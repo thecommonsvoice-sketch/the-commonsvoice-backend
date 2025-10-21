@@ -103,6 +103,7 @@ model LatestNews {
   title        String
   photoUrl    String?
   link        String?   
+  type        String?   
   description String?
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt
