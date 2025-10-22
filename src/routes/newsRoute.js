@@ -28,7 +28,7 @@ router.get("/news", getCachedNews);
  * CRON ENDPOINT — call these from a scheduler like node-cron
  * ------------------------------------------------------------ */
 
-router.get("/cron/fetch-news", async (req, res) => {
+router.get("/fetch-news-cat", async (req, res) => {
   const { category } = req.query;
   if (!category)
     return res.status(400).json({ success: false, message: "Category is required." });
