@@ -63,13 +63,47 @@ export async function getCachedNews(req, res) {
  * 1. CRON USE ONLY — Fetch from TheNewsAPI and store in DB
  * ------------------------------------------------------------ */
 export async function fetchNewsByCategory(category) {
+  console.log(`Starting fetch for category: ${category}`);
   try {
-    // Helper to fetch from API
+    // Helper to fetch from API with retries and better error handling
     const fetchFromAPI = async (paramsObj) => {
       const params = new URLSearchParams(paramsObj);
-      const response = await fetch(`https://api.thenewsapi.com/v1/news/all?${params}`);
-      const data = await response.json();
-      return data.data || [];
+      const maxRetries = 3;
+      let lastError;
+
+      for (let i = 0; i < maxRetries; i++) {
+        try {
+          const response = await fetch(`https://api.thenewsapi.com/v1/news/all?${params}`, {
+            headers: {
+              'Accept': 'application/json',
+              'User-Agent': 'TheCommonVoice/1.0'
+            },
+            // Follow redirects automatically
+            redirect: 'follow',
+            // Reasonable timeout
+            timeout: 10000
+          });
+
+          // Log response status for debugging
+          console.log(`API Response Status: ${response.status} for category: ${paramsObj.categories || paramsObj.search}`);
+          
+          if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+          }
+          
+          const data = await response.json();
+          return data.data || [];
+        } catch (error) {
+          lastError = error;
+          console.error(`Attempt ${i + 1} failed:`, error.message);
+          // Wait before retrying (exponential backoff)
+          if (i < maxRetries - 1) {
+            await new Promise(resolve => setTimeout(resolve, Math.pow(2, i) * 1000));
+          }
+        }
+      }
+      
+      throw lastError;
     };
 
     // 1️⃣ Try category with Indian locale
