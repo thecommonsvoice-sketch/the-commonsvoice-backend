@@ -3,8 +3,8 @@ import { createCategory, getCategories, getCategoryBySlugOrId, updateCategory, d
 import { authenticate } from "../middleware/auth.middleware.js";
 import { authorizeRole } from "../middleware/authorizeRole.js";
 const router = Router();
-// Create Category (ADMIN, EDITOR)
-router.post("/", authenticate, authorizeRole(["ADMIN", "EDITOR"]), createCategory);
+// Create Category (ADMIN, EDITOR, REPORTER)
+router.post("/", authenticate, authorizeRole(["ADMIN", "EDITOR", "REPORTER"]), createCategory);
 // Get all categories (Public)
 router.get("/", getCategories);
 // Get category by slug or id (Public)

@@ -11,6 +11,7 @@ const articleSchema = z.object({
     coverImage: z.string().url().optional().or(z.literal("")).or(z.null()),
     metaTitle: z.string().max(60).optional().or(z.literal("")),
     metaDescription: z.string().max(160).optional().or(z.literal("")),
+    tags: z.array(z.string().min(1, "Tag cannot be empty")).optional(),
     status: z.nativeEnum(ArticleStatus).optional(),
     videos: z.array(z.object({
         type: z.enum(['upload', 'embed']),
@@ -48,8 +49,8 @@ export const createArticle = async (req, res) => {
         return;
     }
     try {
-        const { title, content, categoryId, coverImage, metaTitle, metaDescription, videos } = parsed.data;
-        console.log('Parsed data:', { title, content, categoryId, coverImage, metaTitle, metaDescription, videos });
+        const { title, content, categoryId, coverImage, metaTitle, metaDescription, tags, videos } = parsed.data;
+        console.log('Parsed data:', { title, content, categoryId, coverImage, metaTitle, metaDescription, tags, videos });
         const slug = await generateSlug(title);
         console.log('Generated slug:', slug);
         const articleData = {
@@ -60,6 +61,7 @@ export const createArticle = async (req, res) => {
             coverImage: coverImage || null,
             metaTitle: metaTitle || title.slice(0, 60),
             metaDescription: metaDescription || content.slice(0, 160),
+            tags: tags || [],
             status: ArticleStatus.DRAFT,
             authorId: req.user.userId,
         };
@@ -257,7 +259,7 @@ export const getArticleBySlugOrId = async (req, res) => {
 export const updateArticle = async (req, res) => {
     try {
         const { slugOrId } = req.params;
-        const { title, content, categoryId, coverImage, metaTitle, metaDescription, videos } = req.body;
+        const { title, content, categoryId, coverImage, metaTitle, metaDescription, tags, videos } = req.body;
         console.log('Updating article with videos:', videos);
         // Find the article
         const existingArticle = await prisma.article.findFirst({
@@ -286,35 +288,41 @@ export const updateArticle = async (req, res) => {
             res.status(403).json({ message: "Not authorized to edit this article" });
             return;
         }
-        // Handle video updates only when videos provided
-        if (Array.isArray(videos)) {
+        // Always handle video updates - delete old videos first if videos array is provided
+        if (videos !== undefined && Array.isArray(videos)) {
+            // Delete existing videos for complete replacement
             await prisma.articleVideo.deleteMany({
                 where: { articleId: existingArticle.id },
             });
         }
-        // Update article with new data including videos
+        
+        // Prepare update data
+        const updateData = {
+            title,
+            content,
+            categoryId,
+            coverImage,
+            metaTitle,
+            metaDescription,
+            tags: tags || [],
+        };
+        
+        // Add videos to update only if provided as an array (including empty arrays)
+        if (videos !== undefined && Array.isArray(videos)) {
+            updateData.videos = {
+                create: videos.map((video) => ({
+                    type: video.type,
+                    url: video.url,
+                    title: video.title || null,
+                    description: video.description || null,
+                })),
+            };
+        }
+        
+        // Update article with new data
         const updatedArticle = await prisma.article.update({
             where: { id: existingArticle.id },
-            data: {
-                title,
-                content,
-                categoryId,
-                coverImage,
-                metaTitle,
-                metaDescription,
-                ...(Array.isArray(videos)
-                    ? {
-                        videos: {
-                            create: videos.map((video) => ({
-                                type: video.type,
-                                url: video.url,
-                                title: video.title,
-                                description: video.description,
-                            })),
-                        },
-                    }
-                    : {}),
-            },
+            data: updateData,
             include: {
                 author: true,
                 category: true,
