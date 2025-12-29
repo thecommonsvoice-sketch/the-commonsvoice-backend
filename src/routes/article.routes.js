@@ -3,12 +3,12 @@ import { createArticle, getArticles, getArticleBySlugOrId, getArticleWithRoleChe
 updateArticle, deleteArticle, restoreArticle, updateArticleStatus, } from "../controllers/articleController.js";
 import { authenticate } from "../middleware/auth.middleware.js";
 import { authorizeRole } from "../middleware/authorizeRole.js";
-// import { checkUser } from "middleware/checkUser.js";
+import { checkUser } from "../middleware/checkUser.js";
 const router = Router();
 // Create article (EDITOR, REPORTER, ADMIN)
 router.post("/", authenticate, authorizeRole(["EDITOR", "REPORTER", "ADMIN"]), createArticle);
 // Get all articles (public, with pagination & filters)
-router.get("/", getArticles);
+router.get("/", checkUser, getArticles);
 // Get single article by slug or ID
 router.get("/:slugOrId", getArticleBySlugOrId);
 // Get article with role-based access control

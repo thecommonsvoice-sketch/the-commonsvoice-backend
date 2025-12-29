@@ -183,26 +183,27 @@ export const getArticles = async (req, res) => {
             }),
             prisma.article.count({ where }),
         ]);
-        // // is bookmarked
-        // if (userId) {
-        //   let id = userId as string;
-        //   const articleIds = articles.map((article) => article.id);
-        //   const bookmarks = await prisma.bookmark.findMany({
-        //     where: {
-        //       id,
-        //       articleId: { in: articleIds },
-        //     },
-        //     select: { articleId: true },
-        //   });
-        //   const bookmarkedArticleIds = new Set(
-        //     bookmarks.map((bookmark) => bookmark.articleId)
-        //   );
-        //   articles.forEach((article) => {
-        //     (article as any).isBookmarked = bookmarkedArticleIds.has(article.id);
-        //   }
-        //   );
-        //   console.log("Bookmarked Article IDs:", Array.from(articles));
-        // }
+        // Attach bookmark status for authenticated users
+        if (req.user?.userId) {
+            const userId = req.user.userId;
+            const articleIds = articles.map((article) => article.id);
+            
+            const bookmarks = await prisma.bookmark.findMany({
+                where: {
+                    userId,
+                    articleId: { in: articleIds },
+                },
+                select: { articleId: true },
+            });
+            
+            const bookmarkedArticleIds = new Set(
+                bookmarks.map((bookmark) => bookmark.articleId)
+            );
+            
+            articles.forEach((article) => {
+                article.isBookmarked = bookmarkedArticleIds.has(article.id);
+            });
+        }
         // Send response with updated count
         res.json({
             data: articles,

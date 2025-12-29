@@ -17,6 +17,11 @@ export const addBookmark = async (req, res) => {
         res.status(201).json({ success: true, message: "Article bookmarked successfully", bookmark });
     }
     catch (error) {
+        // Handle unique constraint violation (bookmark already exists)
+        if (error.code === 'P2002') {
+            res.status(200).json({ success: true, message: "Article already bookmarked" });
+            return;
+        }
         console.error("Error adding bookmark:", error);
         res.status(500).json({ message: "Failed to bookmark article" });
     }
