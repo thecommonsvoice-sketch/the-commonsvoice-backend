@@ -106,18 +106,51 @@ export const createArticle = async (req, res) => {
 export const getArticles = async (req, res) => {
     try {
         const { page = 1, limit = 10, search = "", category, author, authorId, // New authorId parameter
-        // userId,
-        status, startDate, endDate, } = req.query;
+            // userId,
+            status, startDate, endDate, } = req.query;
         const isGuest = !req.user || req.user.role === "USER";
         console.log("is guest:", isGuest);
         // Get current date without time (just date comparison)
         const currentDate = new Date();
         currentDate.setHours(0, 0, 0, 0); // Set to midnight to ignore the time part
+
+        // HIERARCHY LOGIC: Resolve category and its children
+        let categoryFilter = {};
+        if (category) {
+            const catStr = String(category);
+            // Search for categories matching slug or name
+            // We prioritize slug match as that's what frontend sends
+            const matchingCategories = await prisma.category.findMany({
+                where: {
+                    OR: [
+                        { slug: catStr },
+                        { name: { contains: catStr, mode: "insensitive" } }
+                    ]
+                },
+                include: { children: { select: { id: true } } }
+            });
+
+            if (matchingCategories.length > 0) {
+                // If we found categories, include them AND their children
+                const ids = new Set();
+                matchingCategories.forEach(c => {
+                    ids.add(c.id);
+                    if (c.children) {
+                        c.children.forEach(child => ids.add(child.id));
+                    }
+                });
+                categoryFilter = { categoryId: { in: Array.from(ids) } };
+            } else {
+                // Fallback: If no category found in DB, filter by name string match on Article's relation
+                categoryFilter = { category: { name: { contains: catStr, mode: "insensitive" } } };
+            }
+        }
+
         const where = {
             deletedAt: null, // Exclude soft-deleted articles
             ...(isGuest && !authorId && { status: ArticleStatus.PUBLISHED }), // Only published for guests unless authorId is provided
             ...(status && typeof status === 'string' && Object.values(ArticleStatus).includes(status) && { status: status }), // Filter by status
-            ...(category && { category: { name: { contains: String(category), mode: "insensitive" } } }), // Filter by category
+            ...(category && categoryFilter), // Apply hierarchy filter
             ...(author && { author: { name: { contains: String(author), mode: "insensitive" } } }), // Filter by author name
             ...(authorId && { authorId: String(authorId) }), // Filter by authorId (includes all statuses)
             ...(search && {
@@ -187,7 +220,7 @@ export const getArticles = async (req, res) => {
         if (req.user?.userId) {
             const userId = req.user.userId;
             const articleIds = articles.map((article) => article.id);
-            
+
             const bookmarks = await prisma.bookmark.findMany({
                 where: {
                     userId,
@@ -195,11 +228,11 @@ export const getArticles = async (req, res) => {
                 },
                 select: { articleId: true },
             });
-            
+
             const bookmarkedArticleIds = new Set(
                 bookmarks.map((bookmark) => bookmark.articleId)
             );
-            
+
             articles.forEach((article) => {
                 article.isBookmarked = bookmarkedArticleIds.has(article.id);
             });
@@ -296,7 +329,7 @@ export const updateArticle = async (req, res) => {
                 where: { articleId: existingArticle.id },
             });
         }
-        
+
         // Prepare update data
         const updateData = {
             title,
@@ -307,7 +340,7 @@ export const updateArticle = async (req, res) => {
             metaDescription,
             tags: tags || [],
         };
-        
+
         // Add videos to update only if provided as an array (including empty arrays)
         if (videos !== undefined && Array.isArray(videos)) {
             updateData.videos = {
@@ -319,7 +352,7 @@ export const updateArticle = async (req, res) => {
                 })),
             };
         }
-        
+
         // Update article with new data
         const updatedArticle = await prisma.article.update({
             where: { id: existingArticle.id },

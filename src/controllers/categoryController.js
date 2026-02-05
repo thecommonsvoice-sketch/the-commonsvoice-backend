@@ -4,15 +4,19 @@ import { z } from "zod";
 const categorySchema = z.object({
     name: z.string().min(2, "Category name must be at least 2 characters"),
     description: z.string().optional(),
-    isActive: z.boolean().optional()
+    isActive: z.boolean().optional(),
+    parentId: z.string().optional().nullable()
 });
 const updateSchema = z.object({
     name: z.string().min(2).optional(),
     description: z.string().optional(),
-    isActive: z.boolean().optional()
+    isActive: z.boolean().optional(),
+    parentId: z.string().optional().nullable()
 });
+
 // Utility to create slug
 const generateSlug = (name) => name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)+/g, "");
+
 // CREATE CATEGORY
 export const createCategory = async (req, res) => {
     const parsed = categorySchema.safeParse(req.body);
@@ -27,7 +31,19 @@ export const createCategory = async (req, res) => {
         res.status(401).json({ message: "Unauthorized" });
         return;
     }
-    const { name, description, isActive } = parsed.data;
+    const { name, description, isActive, parentId } = parsed.data;
+
+    // Validate parent category exists if parentId is provided
+    if (parentId) {
+        const parentExists = await prisma.category.findUnique({
+            where: { id: parentId }
+        });
+        if (!parentExists) {
+            res.status(400).json({ message: "Parent category not found" });
+            return;
+        }
+    }
+
     let slug = generateSlug(name);
     // Ensure unique slug
     const existingSlug = await prisma.category.findUnique({ where: { slug } });
@@ -40,7 +56,8 @@ export const createCategory = async (req, res) => {
                 name,
                 slug,
                 description,
-                isActive: isActive ?? true
+                isActive: isActive ?? true,
+                parentId
             }
         });
         res.status(201).json({ message: "Category created successfully", category });
@@ -50,16 +67,68 @@ export const createCategory = async (req, res) => {
         res.status(500).json({ message: "Failed to create category", error });
     }
 };
+
 // GET ALL CATEGORIES (public)
 export const getCategories = async (_req, res) => {
     try {
-        const categories = await prisma.category.findMany({
-            where: { isActive: true },
-            orderBy: { createdAt: "desc" }
+        // Get all parent categories
+        const allCategories = await prisma.category.findMany({
+            where: {
+                isActive: true,
+                parentId: null
+            },
+            include: {
+                children: {
+                    where: { isActive: true },
+                    select: { id: true, name: true, slug: true }
+                }
+            }
         });
+
+        // Define the desired order: General, Politics, Science and Technology, Entertainment, Business
+        const orderMap = {
+            'general': 1,
+            'politics': 2,
+            'science-and-technology': 3,
+            'entertainment': 4,
+            'business': 5
+        };
+
+        // Sort categories according to the defined order
+        const categories = allCategories.sort((a, b) => {
+            const orderA = orderMap[a.slug] || 999;
+            const orderB = orderMap[b.slug] || 999;
+            return orderA - orderB;
+        });
+
         res.json({ categories });
     }
     catch (error) {
+        console.error(error);
+        res.status(500).json({ message: "Failed to fetch categories", error });
+    }
+};
+
+// GET ALL CATEGORIES WITH HIERARCHY
+export const getAllCategoriesWithHierarchy = async (_req, res) => {
+    try {
+        const categories = await prisma.category.findMany({
+            where: { isActive: true },
+            include: {
+                parent: { select: { id: true, name: true, slug: true } },
+                children: {
+                    where: { isActive: true },
+                    select: { id: true, name: true, slug: true }
+                }
+            },
+            orderBy: [
+                { parentId: 'asc' }, // nulls (parents) first usually, or grouped
+                { name: 'asc' }
+            ]
+        });
+
+        res.json({ categories });
+    } catch (error) {
         console.error(error);
         res.status(500).json({ message: "Failed to fetch categories", error });
     }
