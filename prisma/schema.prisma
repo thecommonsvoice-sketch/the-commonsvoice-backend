@@ -57,6 +57,13 @@ model Article {
   comments        Comment[] // Relation to comments
   bookmarks       Bookmark[] // Relation to bookmarks
   videos          ArticleVideo[]
+
+  @@index([categoryId])
+  @@index([authorId])
+  @@index([createdAt])
+  @@index([status])
+  @@index([status, createdAt])
+  @@index([categoryId, status, createdAt])
 }
 
 model Comment {

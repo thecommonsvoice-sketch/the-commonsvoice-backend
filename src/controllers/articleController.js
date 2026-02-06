@@ -80,40 +80,40 @@ export const createArticle = async (req, res) => {
         const article = await prisma.article.create({
             data: articleData,
             include: {
-                author: { select: { id: true, name: true, email: true } },
-                category: { select: { id: true, name: true, slug: true } },
+                author: true,
+                category: true,
                 videos: true,
             },
         });
         console.log('Article created successfully:', article.id);
-        res.status(201).json({
-            message: "Article created successfully",
-            article,
-        });
-        return;
+        res.status(201).json({ article });
     }
     catch (error) {
         console.error('Article creation error:', error);
-        if (!res.headersSent) {
-            res
-                .status(500)
-                .json({ message: "Failed to create article", error: error instanceof Error ? error.message : 'Unknown error' });
-            return;
-        }
+        res.status(500).json({ message: "Failed to create article" });
     }
 };
-// Get All Articles (Public + Authenticated)
+// Get All Articles with Filters
 export const getArticles = async (req, res) => {
+    const { page = 1, limit = 10, search, category, author, startDate, endDate, status, } = req.query;
     try {
-        const { page = 1, limit = 10, search = "", category, author, authorId, // New authorId parameter
-            // userId,
-            status, startDate, endDate, } = req.query;
+        // Build where clause
+        const where = { deletedAt: null };
+        // Role-based filtering
         const isGuest = !req.user || req.user.role === "USER";
-        console.log("is guest:", isGuest);
-        // Get current date without time (just date comparison)
-        const currentDate = new Date();
-        currentDate.setHours(0, 0, 0, 0); // Set to midnight to ignore the time part
-
+        if (isGuest) {
+            where.status = ArticleStatus.PUBLISHED;
+        }
+        else if (status) {
+            where.status = status;
+        }
+        // Search filter
+        if (search) {
+            where.OR = [
+                { title: { contains: String(search), mode: "insensitive" } },
+                { content: { contains: String(search), mode: "insensitive" } },
+            ];
+        }
         // HIERARCHY LOGIC: Resolve category and its children
         let categoryFilter = {};
         if (category) {
@@ -129,7 +129,6 @@ export const getArticles = async (req, res) => {
                 },
                 include: { children: { select: { id: true } } }
             });
-
             if (matchingCategories.length > 0) {
                 // If we found categories, include them AND their children
                 const ids = new Set();
@@ -140,60 +139,32 @@ export const getArticles = async (req, res) => {
                     }
                 });
                 categoryFilter = { categoryId: { in: Array.from(ids) } };
-            } else {
+            }
+            else {
                 // Fallback: If no category found in DB, filter by name string match on Article's relation
                 categoryFilter = { category: { name: { contains: catStr, mode: "insensitive" } } };
             }
         }
-
-        const where = {
-            deletedAt: null, // Exclude soft-deleted articles
-            ...(isGuest && !authorId && { status: ArticleStatus.PUBLISHED }), // Only published for guests unless authorId is provided
-            ...(status && typeof status === 'string' && Object.values(ArticleStatus).includes(status) && { status: status }), // Filter by status
-            ...(category && categoryFilter), // Apply hierarchy filter
-            ...(author && { author: { name: { contains: String(author), mode: "insensitive" } } }), // Filter by author name
-            ...(authorId && { authorId: String(authorId) }), // Filter by authorId (includes all statuses)
-            ...(search && {
-                OR: [
-                    { title: { contains: String(search), mode: "insensitive" } }, // Match title
-                    { content: { contains: String(search), mode: "insensitive" } }, // Match content
-                    // { tags: { has: String(search) } }, // Match tags (assuming tags is an array)
-                    { category: { name: { contains: String(search), mode: "insensitive" } } }, // Match category name
-                    { author: { name: { contains: String(search), mode: "insensitive" } } }, // Match author name
-                    { metaTitle: { contains: String(search), mode: "insensitive" } }, // Match meta title
-                    { metaDescription: { contains: String(search), mode: "insensitive" } }, // Match meta description
-                ],
-            }),
-            ...(startDate && endDate && {
-                createdAt: {
-                    gte: new Date(startDate),
-                    lte: new Date(endDate),
-                },
-            }),
-        };
+        // Author filter
+        if (author) {
+            where.author = { name: { contains: String(author), mode: "insensitive" } };
+        }
+        // Date range filter
+        if (startDate || endDate) {
+            where.createdAt = {};
+            if (startDate)
+                where.createdAt.gte = new Date(String(startDate));
+            if (endDate)
+                where.createdAt.lte = new Date(String(endDate));
+        }
+        // Merge category filter into where clause
+        Object.assign(where, categoryFilter);
+        // Fetch articles with pagination
         const skip = (Number(page) - 1) * Number(limit);
-        // Get today's updated articles count
-        const updatedTodayCount = await prisma.article.count({
-            where: {
-                NOT: {
-                    status: ArticleStatus.DRAFT || ArticleStatus.ARCHIVED,
-                },
-                updatedAt: {
-                    gte: currentDate, // Greater than or equal to today's midnight
-                    lt: new Date(currentDate.getTime() + 86400000), // Less than tomorrow's midnight
-                },
-                ...(author && { author: { name: { contains: String(author), mode: "insensitive" } } }), // Filter by author if provided
-            },
-        });
-        // Get today's updated draft articles count
-        const draftCount = await prisma.article.count({
-            where: {
-                status: ArticleStatus.DRAFT,
-                ...(author && { author: { name: { contains: String(author), mode: "insensitive" } } }), // Filter by author if provided
-            },
-        });
-        // Fetch articles and total count
-        const [articles, total] = await Promise.all([
+        // Fetch counts for dashboard stats
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+        const [articles, total, updatedTodayCount, draftCount] = await Promise.all([
             prisma.article.findMany({
                 where,
                 skip,
@@ -268,11 +239,32 @@ export const getArticleBySlugOrId = async (req, res) => {
     try {
         const article = await prisma.article.findUnique({
             where,
-            include: {
-                author: { select: { id: true, name: true, email: true } },
-                category: { select: { id: true, name: true, slug: true } },
-                videos: true,
-            },
+            select: {
+                id: true,
+                title: true,
+                slug: true,
+                content: true,
+                coverImage: true,
+                excerpt: true,
+                metaTitle: true,
+                metaDescription: true,
+                status: true,
+                createdAt: true,
+                updatedAt: true,
+                author: {
+                    select: {
+                        name: true  // Only fetch name, not id/email
+                    }
+                },
+                category: {
+                    select: {
+                        id: true,
+                        name: true,
+                        slug: true
+                    }
+                },
+                videos: true
+            }
         });
         // const {user} = req.params;
         const isGuest = !req.user || req.user.role === "USER";
@@ -289,6 +281,53 @@ export const getArticleBySlugOrId = async (req, res) => {
         res.status(500).json({ message: "Failed to fetch article", error });
     }
 };
+
+// Get Adjacent Articles (Next/Previous)
+export const getAdjacentArticles = async (req, res) => {
+    const { slug } = req.params;
+
+    try {
+        // Get current article to find its createdAt
+        const current = await prisma.article.findUnique({
+            where: { slug },
+            select: { createdAt: true, categoryId: true }
+        });
+
+        if (!current) {
+            return res.status(404).json({ message: "Article not found" });
+        }
+
+        // Use Promise.all to fetch next and prev in parallel
+        const [next, prev] = await Promise.all([
+            // Next article (newer)
+            prisma.article.findFirst({
+                where: {
+                    createdAt: { gt: current.createdAt },
+                    status: 'PUBLISHED',
+                    deletedAt: null
+                },
+                orderBy: { createdAt: 'asc' },
+                select: { title: true, slug: true }
+            }),
+            // Previous article (older)
+            prisma.article.findFirst({
+                where: {
+                    createdAt: { lt: current.createdAt },
+                    status: 'PUBLISHED',
+                    deletedAt: null
+                },
+                orderBy: { createdAt: 'desc' },
+                select: { title: true, slug: true }
+            })
+        ]);
+
+        res.json({ next, prev });
+    } catch (error) {
+        console.error('Adjacent articles error:', error);
+        res.status(500).json({ message: "Failed to fetch adjacent articles" });
+    }
+};
+
 // Update Article
 export const updateArticle = async (req, res) => {
     try {
@@ -299,58 +338,62 @@ export const updateArticle = async (req, res) => {
         const existingArticle = await prisma.article.findFirst({
             where: {
                 OR: [
-                    { id: slugOrId },
-                    { slug: slugOrId }
+                    { slug: slugOrId },
+                    { id: slugOrId }
                 ]
             },
             include: {
-                videos: true,
-                author: true,
-                category: true
+                videos: true
             }
         });
         if (!existingArticle) {
-            res.status(404).json({ message: "Article not found" });
-            return;
+            return res.status(404).json({ message: "Article not found" });
         }
-        // Check authorization
-        if (!req.user) {
-            res.status(401).json({ message: "Unauthorized" });
-            return;
+        // Authorization check
+        const isAdmin = req.user.role === "ADMIN";
+        const isEditor = req.user.role === "EDITOR";
+        const isReporterOwner = req.user.role === "REPORTER" && existingArticle.authorId === req.user.userId;
+        if (!isAdmin && !isEditor && !isReporterOwner) {
+            return res.status(403).json({ message: "You are not authorized to update this article" });
         }
-        if (req.user.role === "REPORTER" && existingArticle.authorId !== req.user.userId) {
-            res.status(403).json({ message: "Not authorized to edit this article" });
-            return;
-        }
-        // Always handle video updates - delete old videos first if videos array is provided
-        if (videos !== undefined && Array.isArray(videos)) {
-            // Delete existing videos for complete replacement
-            await prisma.articleVideo.deleteMany({
-                where: { articleId: existingArticle.id },
-            });
-        }
-
         // Prepare update data
-        const updateData = {
-            title,
-            content,
-            categoryId,
-            coverImage,
-            metaTitle,
-            metaDescription,
-            tags: tags || [],
-        };
-
-        // Add videos to update only if provided as an array (including empty arrays)
-        if (videos !== undefined && Array.isArray(videos)) {
-            updateData.videos = {
-                create: videos.map((video) => ({
-                    type: video.type,
-                    url: video.url,
-                    title: video.title || null,
-                    description: video.description || null,
-                })),
-            };
+        const updateData = {};
+        if (title !== undefined) {
+            updateData.title = title;
+            // Regenerate slug if title changed
+            if (title !== existingArticle.title) {
+                updateData.slug = await generateSlug(title, existingArticle.id);
+            }
+        }
+        if (content !== undefined)
+            updateData.content = content;
+        if (categoryId !== undefined)
+            updateData.categoryId = categoryId;
+        if (coverImage !== undefined)
+            updateData.coverImage = coverImage || null;
+        if (metaTitle !== undefined)
+            updateData.metaTitle = metaTitle;
+        if (metaDescription !== undefined)
+            updateData.metaDescription = metaDescription;
+        if (tags !== undefined)
+            updateData.tags = tags;
+        // Handle videos update
+        if (videos !== undefined) {
+            // Delete existing videos
+            await prisma.articleVideo.deleteMany({
+                where: { articleId: existingArticle.id }
+            });
+            // Create new videos if provided
+            if (Array.isArray(videos) && videos.length > 0) {
+                updateData.videos = {
+                    create: videos.map((video) => ({
+                        type: video.type,
+                        url: video.url,
+                        title: video.title || null,
+                        description: video.description || null,
+                    })),
+                };
+            }
         }
 
         // Update article with new data
@@ -418,21 +461,27 @@ export const deleteArticle = async (req, res) => {
     }
     catch (error) {
         console.error(error);
-        res.status(500).json({ message: "Failed to delete article", error });
+        res.status(500).json({ message: "Failed to delete article" });
     }
 };
-// Restore Article (Undo Soft Delete)
+// Restore Article
 export const restoreArticle = async (req, res) => {
     const { slugOrId } = req.params;
-    const where = CUID_REGEX.test(slugOrId) ? { id: slugOrId } : { slug: slugOrId };
-    if (!req.user || req.user.role !== "ADMIN") {
-        res.status(403).json({ message: "Only admins can restore articles" });
+    const where = CUID_REGEX.test(slugOrId)
+        ? { id: slugOrId }
+        : { slug: slugOrId };
+    if (!req.user || (req.user.role !== "ADMIN" && req.user.role !== "EDITOR")) {
+        res.status(403).json({ message: "Only admins and editors can restore articles" });
         return;
     }
     try {
         const article = await prisma.article.findUnique({ where });
-        if (!article || !article.deletedAt) {
-            res.status(404).json({ message: "Article not found or not deleted" });
+        if (!article) {
+            res.status(404).json({ message: "Article not found" });
+            return;
+        }
+        if (!article.deletedAt) {
+            res.status(400).json({ message: "Article is not deleted" });
             return;
         }
         const restored = await prisma.article.update({
@@ -443,75 +492,49 @@ export const restoreArticle = async (req, res) => {
     }
     catch (error) {
         console.error(error);
-        res.status(500).json({ message: "Failed to restore article", error });
-    }
-};
-// Automatic Permanent Deletion (Cron Job Example)
-export const autoPurgeDeletedArticles = async () => {
-    const DAYS_BEFORE_PURGE = 30; // Change as needed
-    const cutoffDate = new Date(Date.now() - DAYS_BEFORE_PURGE * 24 * 60 * 60 * 1000);
-    try {
-        const deleted = await prisma.article.deleteMany({
-            where: { deletedAt: { lt: cutoffDate } },
-        });
-    }
-    catch (error) {
-        console.error("Failed to auto-purge deleted articles:", error);
+        res.status(500).json({ message: "Failed to restore article" });
     }
 };
 // Update Article Status
 export const updateArticleStatus = async (req, res) => {
     const { id } = req.params;
     const { status } = req.body;
-    if (!CUID_REGEX.test(id)) {
-        res.status(400).json({ message: "Invalid Article ID" });
-        return;
-    }
-    if (!req.user || !["ADMIN", "EDITOR"].includes(req.user.role)) {
-        res
-            .status(403)
-            .json({ message: "You are not authorized to update status" });
+    if (!req.user || (req.user.role !== "ADMIN" && req.user.role !== "EDITOR")) {
+        res.status(403).json({ message: "Only admins and editors can update article status" });
         return;
     }
     if (!Object.values(ArticleStatus).includes(status)) {
-        res.status(400).json({ message: "Invalid status" });
+        res.status(400).json({ message: "Invalid status value" });
         return;
     }
     try {
-        const updated = await prisma.article.update({
+        const article = await prisma.article.update({
             where: { id },
             data: { status },
+            include: {
+                author: true,
+                category: true,
+            },
         });
-        res.json({ message: "Status updated successfully", article: updated });
+        res.json({ article });
     }
     catch (error) {
         console.error(error);
-        res.status(500).json({ message: "Failed to update status", error });
+        res.status(500).json({ message: "Failed to update article status" });
     }
 };
-// Get Article with Role Check
+// Get Article with Role Check (for editing)
 export const getArticleWithRoleCheck = async (req, res) => {
-    const { slugOrId } = req.params;
-    // Check authentication
-    if (!req.user) {
-        res.status(401).json({ message: "Unauthorized: Authentication required" });
+    const identifier = req.params.slugOrId;
+    if (!identifier) {
+        res.status(400).json({ message: "Slug or ID is required" });
         return;
     }
-    // Deny access to regular users
-    if (req.user.role === "USER") {
-        res.status(403).json({ message: "Access denied: Insufficient permissions" });
-        return;
-    }
+    const where = CUID_REGEX.test(identifier)
+        ? { id: identifier }
+        : { slug: identifier };
     try {
-        const where = {
-            OR: [
-                { id: slugOrId }, // Match by ID
-                { slug: slugOrId }, // Match by slug
-            ],
-            deletedAt: null, // Exclude soft-deleted articles
-        };
-        // Fetch the article from the database
-        const article = await prisma.article.findFirst({
+        const article = await prisma.article.findUnique({
             where,
             include: {
                 author: { select: { id: true, name: true, email: true } },
@@ -519,21 +542,16 @@ export const getArticleWithRoleCheck = async (req, res) => {
                 videos: true,
             },
         });
-        if (!article) {
+        if (!article || article.deletedAt) {
             res.status(404).json({ message: "Article not found" });
             return;
         }
-        console.log('Fetched article for role check:', {
-            id: article.id,
-            slug: article.slug,
-            videosCount: article.videos?.length || 0,
-            videos: article.videos
-        });
         // Role-based access control
-        const isAdmin = req.user.role === "ADMIN";
-        const isEditor = req.user.role === "EDITOR";
-        const isReporter = req.user.role === "REPORTER";
-        const isOwner = article.authorId === req.user.userId;
+        const isAdmin = req.user?.role === "ADMIN";
+        const isEditor = req.user?.role === "EDITOR";
+        const isReporter = req.user?.role === "REPORTER";
+        const isOwner = article.authorId === req.user?.userId;
+        console.log('Role check:', { isAdmin, isEditor, isReporter, isOwner, userId: req.user?.userId, authorId: article.authorId });
         // ADMIN and EDITOR can view any article
         if (isAdmin || isEditor) {
             console.log('Returning article to ADMIN/EDITOR with videos:', article.videos?.length || 0);
