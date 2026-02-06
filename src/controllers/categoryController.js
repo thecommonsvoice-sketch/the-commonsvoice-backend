@@ -90,7 +90,7 @@ export const getCategories = async (_req, res) => {
             'general': 1,
             'politics': 2,
             'science-and-technology': 3,
-            'page-4': 4,
+            'sports-and-entertainment': 4,
             'business': 5
         };
 
