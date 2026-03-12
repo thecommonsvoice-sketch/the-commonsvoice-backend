@@ -1,6 +1,6 @@
 import { Router } from "express";
 import {
-    createArticle, getArticles, getArticleBySlugOrId, getArticleWithRoleCheck, getAdjacentArticles, // Import the new handler
+    createArticle, getArticles, getArticleBySlugOrId, getArticleWithRoleCheck, getAdjacentArticles, getRelatedArticles,
     updateArticle, deleteArticle, restoreArticle, updateArticleStatus,
 } from "../controllers/articleController.js";
 import { authenticate } from "../middleware/auth.middleware.js";
@@ -13,6 +13,8 @@ router.post("/", authenticate, authorizeRole(["EDITOR", "REPORTER", "ADMIN"]), c
 router.get("/", checkUser, getArticles);
 // Get adjacent articles (next/previous) - MUST be before /:slugOrId
 router.get("/adjacent/:slug", getAdjacentArticles);
+// Get related articles (tag-based + category fallback) - MUST be before /:slugOrId
+router.get("/related/:slug", getRelatedArticles);
 // Get single article by slug or ID
 router.get("/:slugOrId", getArticleBySlugOrId);
 // Get article with role-based access control

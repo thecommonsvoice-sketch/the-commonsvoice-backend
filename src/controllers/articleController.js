@@ -178,7 +178,7 @@ export const getArticles = async (req, res) => {
                     status: true,
                     metaTitle: true,
                     metaDescription: true,
-                    // tags: true, // Assuming `tags` is a field in the database
+                    tags: true,
                     category: { select: { name: true, slug: true } },
                     author: { select: { name: true } },
                     createdAt: true,
@@ -248,6 +248,7 @@ export const getArticleBySlugOrId = async (req, res) => {
                 excerpt: true,
                 metaTitle: true,
                 metaDescription: true,
+                tags: true,
                 status: true,
                 createdAt: true,
                 updatedAt: true,
@@ -327,6 +328,87 @@ export const getAdjacentArticles = async (req, res) => {
         res.status(500).json({ message: "Failed to fetch adjacent articles" });
     }
 };
+
+// Get Related Articles (Tag-based, then Category fallback)
+export const getRelatedArticles = async (req, res) => {
+    const { slug } = req.params;
+    const limit = parseInt(req.query.limit) || 4;
+
+    try {
+        // Get the current article's tags and category
+        const current = await prisma.article.findUnique({
+            where: { slug },
+            select: { id: true, tags: true, categoryId: true }
+        });
+
+        if (!current) {
+            return res.status(404).json({ message: "Article not found" });
+        }
+
+        let related = [];
+
+        // Step 1: Try to find articles with matching tags
+        if (current.tags && current.tags.length > 0) {
+            related = await prisma.article.findMany({
+                where: {
+                    id: { not: current.id },
+                    status: 'PUBLISHED',
+                    deletedAt: null,
+                    tags: { hasSome: current.tags },
+                },
+                orderBy: { createdAt: 'desc' },
+                take: limit,
+                select: {
+                    id: true,
+                    title: true,
+                    slug: true,
+                    coverImage: true,
+                    excerpt: true,
+                    tags: true,
+                    category: { select: { name: true, slug: true } },
+                    author: { select: { name: true } },
+                    createdAt: true,
+                },
+            });
+        }
+
+        // Step 2: If not enough tag-matched articles, fill with category-matched
+        if (related.length < limit) {
+            const excludeIds = [current.id, ...related.map(a => a.id)];
+            const remaining = limit - related.length;
+
+            const categoryArticles = await prisma.article.findMany({
+                where: {
+                    id: { notIn: excludeIds },
+                    categoryId: current.categoryId,
+                    status: 'PUBLISHED',
+                    deletedAt: null,
+                },
+                orderBy: { createdAt: 'desc' },
+                take: remaining,
+                select: {
+                    id: true,
+                    title: true,
+                    slug: true,
+                    coverImage: true,
+                    excerpt: true,
+                    tags: true,
+                    category: { select: { name: true, slug: true } },
+                    author: { select: { name: true } },
+                    createdAt: true,
+                },
+            });
+
+            related = [...related, ...categoryArticles];
+        }
+
+        res.json({ data: related });
+    } catch (error) {
+        console.error('Related articles error:', error);
+        res.status(500).json({ message: "Failed to fetch related articles" });
+    }
+};
+
 
 // Update Article
 export const updateArticle = async (req, res) => {
