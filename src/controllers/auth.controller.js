@@ -39,9 +39,8 @@ async function issueTokensAndCookies(res, userId, role, email, oldJti) {
       expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
     },
   });
-  const base = getCookieOptions();
-  res.cookie(ACCESS_TOKEN_COOKIE, access, base); // Use maxAge from getCookieOptions
-  res.cookie(REFRESH_TOKEN_COOKIE, refresh, base); // Use maxAge from getCookieOptions
+  res.cookie(ACCESS_TOKEN_COOKIE, access, getCookieOptions("access"));
+  res.cookie(REFRESH_TOKEN_COOKIE, refresh, getCookieOptions("refresh"));
 }
 export const register = async (req, res) => {
   const parsed = registerSchema.safeParse(req.body);
@@ -196,9 +195,8 @@ export const logout = async (req, res) => {
       // Ignore malformed/expired token on logout
     }
   }
-  const base = getCookieOptions();
-  res.clearCookie(ACCESS_TOKEN_COOKIE, base);
-  res.clearCookie(REFRESH_TOKEN_COOKIE, base);
+  res.clearCookie(ACCESS_TOKEN_COOKIE, getCookieOptions("access"));
+  res.clearCookie(REFRESH_TOKEN_COOKIE, getCookieOptions("refresh"));
   res.json({ message: "Logged out successfully" });
 };
 
