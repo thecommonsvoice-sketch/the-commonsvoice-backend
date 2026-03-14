@@ -329,7 +329,7 @@ export const getAdjacentArticles = async (req, res) => {
     }
 };
 
-// Get Related Articles (Tag-based, then Category fallback)
+// Get Related Articles (Tag-based, then Category fallback, then recent fallback)
 export const getRelatedArticles = async (req, res) => {
     const { slug } = req.params;
     const limit = parseInt(req.query.limit) || 4;
@@ -346,12 +346,13 @@ export const getRelatedArticles = async (req, res) => {
         }
 
         let related = [];
+        const excludeIds = [current.id]; // Always exclude the current article
 
         // Step 1: Try to find articles with matching tags
         if (current.tags && current.tags.length > 0) {
             related = await prisma.article.findMany({
                 where: {
-                    id: { not: current.id },
+                    id: { notIn: excludeIds },
                     status: 'PUBLISHED',
                     deletedAt: null,
                     tags: { hasSome: current.tags },
@@ -370,11 +371,13 @@ export const getRelatedArticles = async (req, res) => {
                     createdAt: true,
                 },
             });
+
+            // Track what we already have
+            related.forEach(a => excludeIds.push(a.id));
         }
 
-        // Step 2: If not enough tag-matched articles, fill with category-matched
+        // Step 2: If not enough, fill with same-category articles
         if (related.length < limit) {
-            const excludeIds = [current.id, ...related.map(a => a.id)];
             const remaining = limit - related.length;
 
             const categoryArticles = await prisma.article.findMany({
@@ -400,6 +403,35 @@ export const getRelatedArticles = async (req, res) => {
             });
 
             related = [...related, ...categoryArticles];
+            categoryArticles.forEach(a => excludeIds.push(a.id));
+        }
+
+        // Step 3: If STILL not enough, fill with recent articles from ANY category
+        if (related.length < limit) {
+            const remaining = limit - related.length;
+
+            const recentArticles = await prisma.article.findMany({
+                where: {
+                    id: { notIn: excludeIds },
+                    status: 'PUBLISHED',
+                    deletedAt: null,
+                },
+                orderBy: { createdAt: 'desc' },
+                take: remaining,
+                select: {
+                    id: true,
+                    title: true,
+                    slug: true,
+                    coverImage: true,
+                    excerpt: true,
+                    tags: true,
+                    category: { select: { name: true, slug: true } },
+                    author: { select: { name: true } },
+                    createdAt: true,
+                },
+            });
+
+            related = [...related, ...recentArticles];
         }
 
         res.json({ data: related });
