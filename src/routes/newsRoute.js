@@ -13,7 +13,9 @@ import {
   fetchScienceNews,
 fetchHealthNews,
 fetchEntertainmentNews,
-fetchFashionNews} from "../controllers/newsControllers.js";
+fetchFashionNews,
+  // Cleanup controller
+  cleanupOldNews} from "../controllers/newsControllers.js";
 
 
 const router = express.Router();
@@ -49,5 +51,11 @@ router.get("/news/science", fetchScienceNews);
 router.get("/news/health", fetchHealthNews);
 router.get("/news/entertainment", fetchEntertainmentNews);
 router.get("/news/fashion", fetchFashionNews);
+
+/* ------------------------------------------------------------
+ * CLEANUP ENDPOINT — removes LatestNews older than ?days=7
+ * Only affects the LatestNews table. Articles, Users, etc. are safe.
+ * ------------------------------------------------------------ */
+router.get("/cleanup-news", cleanupOldNews);
 
 export default router;

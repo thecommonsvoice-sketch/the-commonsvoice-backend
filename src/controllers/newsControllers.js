@@ -282,3 +282,35 @@ export async function fetchFashionNews(req, res) {
     res.status(500).json({ success: false, error: error.message });
   }
 }
+
+/* ------------------------------------------------------------
+ * 3. CLEANUP — Delete old LatestNews records (ONLY LatestNews)
+ * ------------------------------------------------------------ */
+export async function cleanupOldNews(req, res) {
+  try {
+    const daysToKeep = parseInt(req.query.days) || 7;
+    const cutoffDate = new Date();
+    cutoffDate.setDate(cutoffDate.getDate() - daysToKeep);
+
+    // IMPORTANT: This ONLY deletes from the LatestNews table.
+    // Articles, Comments, Bookmarks, Users, etc. are NOT affected.
+    const result = await prisma.latestNews.deleteMany({
+      where: {
+        createdAt: {
+          lt: cutoffDate,
+        },
+      },
+    });
+
+    console.log(`[Cleanup] Deleted ${result.count} old news records (older than ${daysToKeep} days).`);
+
+    res.json({
+      success: true,
+      deletedCount: result.count,
+      message: `Deleted ${result.count} news records older than ${daysToKeep} days.`,
+    });
+  } catch (error) {
+    console.error("[Cleanup] Error:", error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+}
