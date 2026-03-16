@@ -27,6 +27,15 @@ const generateSlug = async (title, excludeId) => {
         .toLowerCase()
         .replace(/[^a-z0-9]+/g, "-")
         .replace(/(^-|-$)+/g, "");
+
+    // Trim the slug to a maximum of 60 characters
+    if (slug.length > 60) {
+        // Find the last complete word within the 60 char limit
+        const trimmed = slug.substring(0, 60);
+        // Avoid ending with a hyphen
+        slug = trimmed.replace(/-+$/, "");
+    }
+
     const existing = await prisma.article.findUnique({ where: { slug } });
     if (existing && existing.id !== excludeId) {
         slug = `${slug}-${Date.now()}`;
