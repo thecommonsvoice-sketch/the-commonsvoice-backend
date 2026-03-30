@@ -16,12 +16,13 @@ fetchEntertainmentNews,
 fetchFashionNews,
   // Cleanup controller
   cleanupOldNews} from "../controllers/newsControllers.js";
+import { cronAuth } from "../middleware/cronAuth.middleware.js";
 
 
 const router = express.Router();
 
 // Fetch news from NewsData.io and save/update in database
-router.get("/fetch-latest-news", fetchLatestNews);
+router.get("/fetch-latest-news", cronAuth, fetchLatestNews);
 
 // Route to return cached news
 router.get("/news", getCachedNews);
@@ -30,7 +31,7 @@ router.get("/news", getCachedNews);
  * CRON ENDPOINT — call these from a scheduler like node-cron
  * ------------------------------------------------------------ */
 
-router.get("/fetch-news-cat", async (req, res) => {
+router.get("/fetch-news-cat", cronAuth, async (req, res) => {
   const { category } = req.query;
   if (!category)
     return res.status(400).json({ success: false, message: "Category is required." });
@@ -56,6 +57,6 @@ router.get("/news/fashion", fetchFashionNews);
  * CLEANUP ENDPOINT — removes LatestNews older than ?days=7
  * Only affects the LatestNews table. Articles, Users, etc. are safe.
  * ------------------------------------------------------------ */
-router.get("/cleanup-news", cleanupOldNews);
+router.get("/cleanup-news", cronAuth, cleanupOldNews);
 
 export default router;
