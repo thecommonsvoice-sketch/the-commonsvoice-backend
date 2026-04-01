@@ -1,6 +1,7 @@
 import { prisma } from "../lib/prisma.js";
 import { z } from "zod";
 import { ArticleStatus } from "@prisma/client";
+import sanitizeHtml from "sanitize-html";
 // CUID regex
 const CUID_REGEX = /^c[a-z0-9]{24}$/;
 // Validation schemas
@@ -58,7 +59,20 @@ export const createArticle = async (req, res) => {
         return;
     }
     try {
-        const { title, content, categoryId, coverImage, metaTitle, metaDescription, tags, videos } = parsed.data;
+        let { title, content, categoryId, coverImage, metaTitle, metaDescription, tags, videos } = parsed.data;
+        
+        // Sanitize content
+        content = sanitizeHtml(content, {
+            allowedTags: sanitizeHtml.defaults.allowedTags.concat(['img', 'iframe', 'video', 'source']),
+            allowedAttributes: {
+                ...sanitizeHtml.defaults.allowedAttributes,
+                '*': ['style', 'class'],
+                'iframe': ['src', 'width', 'height', 'frameborder', 'allow', 'allowfullscreen'],
+                'video': ['src', 'controls', 'width', 'height', 'poster'],
+                'source': ['src', 'type']
+            }
+        });
+
         console.log('Parsed data:', { title, content, categoryId, coverImage, metaTitle, metaDescription, tags, videos });
         const slug = await generateSlug(title);
         console.log('Generated slug:', slug);
@@ -488,8 +502,18 @@ export const updateArticle = async (req, res) => {
                 updateData.slug = await generateSlug(title, existingArticle.id);
             }
         }
-        if (content !== undefined)
-            updateData.content = content;
+        if (content !== undefined) {
+            updateData.content = sanitizeHtml(content, {
+                allowedTags: sanitizeHtml.defaults.allowedTags.concat(['img', 'iframe', 'video', 'source']),
+                allowedAttributes: {
+                    ...sanitizeHtml.defaults.allowedAttributes,
+                    '*': ['style', 'class'],
+                    'iframe': ['src', 'width', 'height', 'frameborder', 'allow', 'allowfullscreen'],
+                    'video': ['src', 'controls', 'width', 'height', 'poster'],
+                    'source': ['src', 'type']
+                }
+            });
+        }
         if (categoryId !== undefined)
             updateData.categoryId = categoryId;
         if (coverImage !== undefined)
