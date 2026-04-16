@@ -1,7 +1,7 @@
 import { prisma } from "../lib/prisma.js";
 import { z } from "zod";
 import { ArticleStatus } from "@prisma/client";
-import sanitizeHtml from "sanitize-html";
+
 // CUID regex
 const CUID_REGEX = /^c[a-z0-9]{24}$/;
 // Validation schemas
@@ -61,17 +61,7 @@ export const createArticle = async (req, res) => {
     try {
         let { title, content, categoryId, coverImage, metaTitle, metaDescription, tags, videos } = parsed.data;
         
-        // Sanitize content
-        content = sanitizeHtml(content, {
-            allowedTags: sanitizeHtml.defaults.allowedTags.concat(['img', 'iframe', 'video', 'source']),
-            allowedAttributes: {
-                ...sanitizeHtml.defaults.allowedAttributes,
-                '*': ['style', 'class'],
-                'iframe': ['src', 'width', 'height', 'frameborder', 'allow', 'allowfullscreen'],
-                'video': ['src', 'controls', 'width', 'height', 'poster'],
-                'source': ['src', 'type']
-            }
-        });
+        // Sanitization removed as requested
 
         console.log('Parsed data:', { title, content, categoryId, coverImage, metaTitle, metaDescription, tags, videos });
         const slug = await generateSlug(title);
@@ -503,16 +493,7 @@ export const updateArticle = async (req, res) => {
             }
         }
         if (content !== undefined) {
-            updateData.content = sanitizeHtml(content, {
-                allowedTags: sanitizeHtml.defaults.allowedTags.concat(['img', 'iframe', 'video', 'source']),
-                allowedAttributes: {
-                    ...sanitizeHtml.defaults.allowedAttributes,
-                    '*': ['style', 'class'],
-                    'iframe': ['src', 'width', 'height', 'frameborder', 'allow', 'allowfullscreen'],
-                    'video': ['src', 'controls', 'width', 'height', 'poster'],
-                    'source': ['src', 'type']
-                }
-            });
+            updateData.content = content;
         }
         if (categoryId !== undefined)
             updateData.categoryId = categoryId;
