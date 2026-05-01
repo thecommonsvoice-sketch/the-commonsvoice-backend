@@ -80,7 +80,7 @@ export const createArticle = async (req, res) => {
             title,
             content,
             slug,
-            categoryId: categoryId ?? "cmetuhypb0000jaappupxf6qx", // default fallback
+            categoryId: categoryId || "cmetuhypb0000jaappupxf6qx", // default fallback
             coverImage: coverImage || null,
             metaTitle: metaTitle || title.slice(0, 60),
             metaDescription: metaDescription || content.slice(0, 160),
