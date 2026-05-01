@@ -79,9 +79,15 @@ export const getCategories = async (_req, res) => {
             },
             include: {
                 children: {
-                    where: { isActive: true },
-                    select: { id: true, name: true, slug: true }
+                    select: { id: true, name: true, slug: true, isActive: true }
                 }
+            }
+        });
+
+        // Filter out inactive children in application code
+        allCategories.forEach(cat => {
+            if (cat.children) {
+                cat.children = cat.children.filter(c => c.isActive);
             }
         });
 
@@ -117,14 +123,17 @@ export const getAllCategoriesWithHierarchy = async (_req, res) => {
             include: {
                 parent: { select: { id: true, name: true, slug: true } },
                 children: {
-                    where: { isActive: true },
-                    select: { id: true, name: true, slug: true }
+                    select: { id: true, name: true, slug: true, isActive: true }
                 }
             },
-            orderBy: [
-                { parentId: 'asc' }, // nulls (parents) first usually, or grouped
-                { name: 'asc' }
-            ]
+            orderBy: { name: 'asc' }
+        });
+
+        // Filter out inactive children in application code
+        categories.forEach(cat => {
+            if (cat.children) {
+                cat.children = cat.children.filter(c => c.isActive);
+            }
         });
 
         res.json({ categories });
@@ -227,5 +236,77 @@ export const deleteCategory = async (req, res) => {
     catch (error) {
         console.error(error);
         res.status(500).json({ message: "Failed to delete category", error });
+    }
+};
+
+// GET INACTIVE CATEGORIES (Admin only)
+export const getInactiveCategories = async (_req, res) => {
+    try {
+        const categories = await prisma.category.findMany({
+            where: { isActive: false },
+            include: {
+                parent: { select: { id: true, name: true } },
+            },
+            orderBy: { name: 'asc' }
+        });
+        res.json({ categories });
+    } catch (error) {
+        console.error(error);
+        res.status(500).json({ message: "Failed to fetch inactive categories", error });
+    }
+};
+
+// RESTORE CATEGORY
+export const restoreCategory = async (req, res) => {
+    const { slugOrId } = req.params;
+    const isCUID = /^c[a-z0-9]{24}$/.test(slugOrId);
+    const whereClause = isCUID ? { id: slugOrId } : { slug: slugOrId };
+    if (!req.user) {
+        res.status(401).json({ message: "Unauthorized" });
+        return;
+    }
+    try {
+        const category = await prisma.category.findUnique({ where: whereClause });
+        if (!category) {
+            res.status(404).json({ message: "Category not found" });
+            return;
+        }
+        await prisma.category.update({
+            where: whereClause,
+            data: { isActive: true }
+        });
+        res.json({ message: "Category restored successfully" });
+    } catch (error) {
+        console.error(error);
+        res.status(500).json({ message: "Failed to restore category", error });
+    }
+};
+
+// HARD DELETE CATEGORY (permanent, admin only)
+export const hardDeleteCategory = async (req, res) => {
+    const { id } = req.params;
+    if (!req.user) {
+        res.status(401).json({ message: "Unauthorized" });
+        return;
+    }
+    try {
+        const category = await prisma.category.findUnique({ where: { id } });
+        if (!category) {
+            res.status(404).json({ message: "Category not found" });
+            return;
+        }
+        // Check if any articles are linked to this category
+        const articleCount = await prisma.article.count({ where: { categoryId: id } });
+        if (articleCount > 0) {
+            res.status(400).json({
+                message: `Cannot permanently delete: ${articleCount} article(s) are assigned to this category. Reassign them first.`
+            });
+            return;
+        }
+        await prisma.category.delete({ where: { id } });
+        res.json({ message: "Category permanently deleted" });
+    } catch (error) {
+        console.error(error);
+        res.status(500).json({ message: "Failed to permanently delete category", error });
     }
 };
