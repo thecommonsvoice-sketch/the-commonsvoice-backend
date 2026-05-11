@@ -41,6 +41,8 @@ async function issueTokensAndCookies(res, userId, role, email, oldJti) {
   });
   res.cookie(ACCESS_TOKEN_COOKIE, access, getCookieOptions("access"));
   res.cookie(REFRESH_TOKEN_COOKIE, refresh, getCookieOptions("refresh"));
+  
+  return { accessToken: access }; // Return token for fallback use
 }
 export const register = async (req, res) => {
   const parsed = registerSchema.safeParse(req.body);
@@ -67,7 +69,7 @@ export const register = async (req, res) => {
       select: { id: true, name: true, email: true, role: true },
     });
     // Issue tokens and set cookies
-    await issueTokensAndCookies(res, user.id, user.role, user.email);
+    const { accessToken } = await issueTokensAndCookies(res, user.id, user.role, user.email);
     // Attach the user to req.user
     req.user = {
       userId: user.id,
@@ -77,6 +79,7 @@ export const register = async (req, res) => {
     res.status(201).json({
       message: "Registration successful",
       user,
+      accessToken, // Fallback for browsers blocking third-party cookies
     });
   } catch (error) {
     console.error("Error during registration:", error);
@@ -110,7 +113,7 @@ export const login = async (req, res) => {
       return;
     }
     // Issue tokens & cookies immediately
-    await issueTokensAndCookies(res, user.id, user.role, user.email);
+    const { accessToken } = await issueTokensAndCookies(res, user.id, user.role, user.email);
     // Attach user to req.user
     req.user = {
       userId: user.id,
@@ -121,6 +124,7 @@ export const login = async (req, res) => {
     res.json({
       message: "Login successful",
       user: safeUser,
+      accessToken, // Fallback for browsers blocking third-party cookies
     });
   } catch (error) {
     console.error("Error during login:", error);

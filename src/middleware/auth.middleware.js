@@ -1,7 +1,13 @@
 import { verifyToken } from "../utils/tokens.js";
 import { ACCESS_TOKEN_COOKIE } from "../config/authCookies.js";
 export const authenticate = async (req, res, next) => {
-    const token = req.cookies?.[ACCESS_TOKEN_COOKIE];
+    // Check for token in cookies first, then in Authorization header
+    let token = req.cookies?.[ACCESS_TOKEN_COOKIE];
+    
+    if (!token && req.headers.authorization?.startsWith("Bearer ")) {
+        token = req.headers.authorization.split(" ")[1];
+    }
+
     if (!token) {
         res.status(401).json({ message: "Authorization token missing" });
         return;
