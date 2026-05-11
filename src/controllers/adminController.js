@@ -152,7 +152,7 @@ export const adminGetAllArticles = async (req, res) => {
                 title: { contains: search, mode: "insensitive" },
             }
             : {};
-        const [articles, total, publishedTodayCount] = await Promise.all([
+        const [articles, total, publishedTodayCount, draftsCount] = await Promise.all([
             prisma.article.findMany({
                 where,
                 include: {
@@ -164,21 +164,24 @@ export const adminGetAllArticles = async (req, res) => {
                 orderBy: { createdAt: "desc" },
             }),
             prisma.article.count({ where }),
-            prisma.article.count({ where: {
-                    NOT: {
-                        status: ArticleStatus.DRAFT || ArticleStatus.ARCHIVED
-                    },
+            prisma.article.count({
+                where: {
+                    status: ArticleStatus.PUBLISHED,
                     updatedAt: {
-                        gte: new Date(new Date().setHours(0, 0, 0, 0)), // Greater than or equal to today's midnight
-                        lt: new Date(new Date().setHours(24, 0, 0, 0)), // Less than tomorrow's midnight
+                        gte: new Date(new Date().setHours(0, 0, 0, 0)),
+                        lt: new Date(new Date().setHours(24, 0, 0, 0)),
                     }
                 }
+            }),
+            prisma.article.count({
+                where: { status: ArticleStatus.DRAFT }
             }),
         ]);
         res.json({
             articles,
             total,
             publishedTodayCount,
+            draftsCount,
             page: pageNum,
             limit: limitNum,
             totalPages: Math.ceil(total / limitNum),
