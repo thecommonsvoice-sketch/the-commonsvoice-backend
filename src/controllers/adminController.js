@@ -140,6 +140,37 @@ export const toggleUserActiveStatus = async (req, res) => {
         res.status(500).json({ message: "Failed to toggle user status" });
     }
 };
+
+export const bulkUpdateUsers = async (req, res) => {
+    const { ids, role, isActive } = req.body;
+    try {
+        const data = {};
+        if (role) data.role = role;
+        if (isActive !== undefined) data.isActive = isActive;
+
+        await prisma.user.updateMany({
+            where: { id: { in: ids }, role: { not: Role.ADMIN } }, // Prevent bulk updating other admins
+            data,
+        });
+        res.json({ message: "Users updated successfully" });
+    } catch (error) {
+        console.error(error);
+        res.status(500).json({ message: "Failed to bulk update users" });
+    }
+};
+
+export const bulkDeleteUsers = async (req, res) => {
+    const { ids } = req.body;
+    try {
+        await prisma.user.deleteMany({
+            where: { id: { in: ids }, role: { not: Role.ADMIN } }, // Prevent bulk deleting other admins
+        });
+        res.json({ message: "Users deleted successfully" });
+    } catch (error) {
+        console.error(error);
+        res.status(500).json({ message: "Failed to bulk delete users" });
+    }
+};
 // ====== ARTICLE MANAGEMENT ======
 export const adminGetAllArticles = async (req, res) => {
     const { page = "1", limit = "10", search = "", } = req.query;
