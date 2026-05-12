@@ -108,7 +108,7 @@ export const createArticle = async (req, res) => {
 };
 // Get All Articles with Filters
 export const getArticles = async (req, res) => {
-    const { page = 1, limit = 10, search, category, author, startDate, endDate, status, } = req.query;
+    const { page = 1, limit = 10, search, category, author, authorId, startDate, endDate, status, } = req.query;
     try {
         // Build where clause
         const where = { deletedAt: null };
@@ -159,7 +159,9 @@ export const getArticles = async (req, res) => {
             }
         }
         // Author filter
-        if (author) {
+        if (authorId) {
+            where.authorId = String(authorId);
+        } else if (author) {
             where.author = { name: { contains: String(author), mode: "insensitive" } };
         }
         // Date range filter
@@ -177,6 +179,7 @@ export const getArticles = async (req, res) => {
         // Fetch counts for dashboard stats
         const today = new Date();
         today.setHours(0, 0, 0, 0);
+        
         const [articles, total, updatedTodayCount, draftCount] = await Promise.all([
             prisma.article.findMany({
                 where,
@@ -199,6 +202,18 @@ export const getArticles = async (req, res) => {
                 },
             }),
             prisma.article.count({ where }),
+            prisma.article.count({ 
+                where: { 
+                    ...where, 
+                    updatedAt: { gte: today } 
+                } 
+            }),
+            prisma.article.count({ 
+                where: { 
+                    ...where, 
+                    status: ArticleStatus.DRAFT 
+                } 
+            }),
         ]);
         // Attach bookmark status for authenticated users
         if (req.user?.userId) {
