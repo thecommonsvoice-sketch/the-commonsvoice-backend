@@ -254,3 +254,45 @@ export const getArticleBySlugOrId = async (req, res) => {
         res.status(500).json({ message: "Failed to fetch article" });
     }
 };
+
+// ====== BULK ACTIONS ======
+export const bulkDeleteArticles = async (req, res) => {
+    const { ids } = req.body;
+    if (!Array.isArray(ids) || ids.length === 0) {
+        res.status(400).json({ message: "Invalid or empty article IDs" });
+        return;
+    }
+    try {
+        await prisma.article.deleteMany({
+            where: { id: { in: ids } },
+        });
+        res.json({ message: `${ids.length} articles deleted successfully` });
+    }
+    catch (error) {
+        console.error(error);
+        res.status(500).json({ message: "Failed to bulk delete articles" });
+    }
+};
+
+export const bulkChangeArticleStatus = async (req, res) => {
+    const { ids, status } = req.body;
+    if (!Array.isArray(ids) || ids.length === 0) {
+        res.status(400).json({ message: "Invalid or empty article IDs" });
+        return;
+    }
+    if (!Object.values(ArticleStatus).includes(status)) {
+        res.status(400).json({ message: "Invalid article status" });
+        return;
+    }
+    try {
+        await prisma.article.updateMany({
+            where: { id: { in: ids } },
+            data: { status },
+        });
+        res.json({ message: `${ids.length} articles updated successfully` });
+    }
+    catch (error) {
+        console.error(error);
+        res.status(500).json({ message: "Failed to bulk update article status" });
+    }
+};

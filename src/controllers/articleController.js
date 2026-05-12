@@ -705,3 +705,82 @@ export const getArticleWithRoleCheck = async (req, res) => {
         res.status(500).json({ message: "Failed to fetch article", error });
     }
 };
+
+// Bulk Delete Articles
+export const bulkDeleteArticles = async (req, res) => {
+    const { ids, force } = req.body;
+    if (!Array.isArray(ids) || ids.length === 0) {
+        return res.status(400).json({ message: "IDs must be a non-empty array" });
+    }
+
+    try {
+        const isAdmin = req.user.role === "ADMIN";
+        const isEditor = req.user.role === "EDITOR";
+
+        // Find articles to check ownership if reporter
+        const articles = await prisma.article.findMany({
+            where: { id: { in: ids } },
+            select: { id: true, authorId: true }
+        });
+
+        if (req.user.role === "REPORTER") {
+            const notOwned = articles.filter(a => a.authorId !== req.user.userId);
+            if (notOwned.length > 0) {
+                return res.status(403).json({ message: "You can only delete your own articles" });
+            }
+        } else if (!isAdmin && !isEditor) {
+            return res.status(403).json({ message: "Not authorized for bulk actions" });
+        }
+
+        if (force === true || force === "true") {
+            if (!isAdmin) {
+                return res.status(403).json({ message: "Only admins can force delete" });
+            }
+            await prisma.article.deleteMany({
+                where: { id: { in: ids } }
+            });
+            return res.json({ message: `${ids.length} articles permanently deleted` });
+        } else {
+            await prisma.article.updateMany({
+                where: { id: { in: ids } },
+                data: { deletedAt: new Date() }
+            });
+            return res.json({ message: `${ids.length} articles soft deleted` });
+        }
+    } catch (error) {
+        console.error("Bulk delete error:", error);
+        res.status(500).json({ message: "Failed to bulk delete articles" });
+    }
+};
+
+// Bulk Update Article Status
+export const bulkUpdateArticleStatus = async (req, res) => {
+    const { ids, status } = req.body;
+    if (!Array.isArray(ids) || ids.length === 0) {
+        return res.status(400).json({ message: "IDs must be a non-empty array" });
+    }
+    if (!Object.values(ArticleStatus).includes(status)) {
+        return res.status(400).json({ message: "Invalid status value" });
+    }
+
+    try {
+        const isAdmin = req.user.role === "ADMIN";
+        const isEditor = req.user.role === "EDITOR";
+
+        if (!isAdmin && !isEditor) {
+            // Reporters might be allowed to move their own to DRAFT or similar?
+            // But usually status change is an editor/admin action.
+            // Let's stick to Editor/Admin for now as per current single-article logic.
+            return res.status(403).json({ message: "Only admins and editors can bulk update status" });
+        }
+
+        await prisma.article.updateMany({
+            where: { id: { in: ids } },
+            data: { status }
+        });
+        res.json({ message: `${ids.length} articles updated to ${status}` });
+    } catch (error) {
+        console.error("Bulk status update error:", error);
+        res.status(500).json({ message: "Failed to bulk update article status" });
+    }
+};

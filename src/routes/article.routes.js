@@ -2,6 +2,7 @@ import { Router } from "express";
 import {
     createArticle, getArticles, getArticleBySlugOrId, getArticleWithRoleCheck, getAdjacentArticles, getRelatedArticles,
     updateArticle, deleteArticle, restoreArticle, updateArticleStatus,
+    bulkDeleteArticles, bulkUpdateArticleStatus,
 } from "../controllers/articleController.js";
 import { authenticate } from "../middleware/auth.middleware.js";
 import { authorizeRole } from "../middleware/authorizeRole.js";
@@ -31,4 +32,9 @@ router.delete("/:slugOrId", authenticate, authorizeRole(["EDITOR", "REPORTER", "
 router.patch("/restore/:slugOrId", authenticate, authorizeRole(["ADMIN", "EDITOR"]), restoreArticle);
 // Update article status (ADMIN, EDITOR only)
 router.patch("/status/:id", authenticate, authorizeRole(["ADMIN", "EDITOR"]), updateArticleStatus);
+
+// Bulk actions
+router.post("/bulk-delete", authenticate, authorizeRole(["EDITOR", "REPORTER", "ADMIN"]), bulkDeleteArticles);
+router.patch("/bulk-status", authenticate, authorizeRole(["EDITOR", "ADMIN"]), bulkUpdateArticleStatus);
+
 export default router;
