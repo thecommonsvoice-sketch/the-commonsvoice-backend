@@ -113,12 +113,17 @@ export const getArticles = async (req, res) => {
         // Build where clause
         const where = { deletedAt: null };
         // Role-based filtering
-        const isGuest = !req.user || req.user.role === "USER";
+        const userRole = req.user?.role;
+        const isGuest = !userRole || userRole === "USER";
+        
         if (isGuest) {
             where.status = ArticleStatus.PUBLISHED;
-        }
-        else if (status) {
-            where.status = status;
+        } else {
+            // Authenticated users (REPORTER, EDITOR, ADMIN) can filter by status
+            // If no status filter provided, show all statuses for their articles
+            if (status) {
+                where.status = status;
+            }
         }
         // Search filter
         if (search) {
