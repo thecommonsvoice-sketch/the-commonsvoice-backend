@@ -1,6 +1,7 @@
 import { prisma } from "../lib/prisma.js";
 import { z } from "zod";
 import { ArticleStatus } from "@prisma/client";
+import { notifyArticlePublished } from "../utils/seoNotifier.js";
 
 // CUID regex
 const CUID_REGEX = /^c[a-z0-9]{24}$/;
@@ -664,6 +665,12 @@ export const updateArticleStatus = async (req, res) => {
                 category: true,
             },
         });
+
+        // Notify search engines when article is published
+        if (status === ArticleStatus.PUBLISHED && article.slug) {
+            notifyArticlePublished(article.slug);
+        }
+
         res.json({ article });
     }
     catch (error) {
@@ -798,6 +805,12 @@ export const bulkUpdateArticleStatus = async (req, res) => {
             where: { id: { in: ids } },
             data: { status }
         });
+
+        // Notify search engines when articles are bulk-published
+        if (status === ArticleStatus.PUBLISHED) {
+            notifyArticlePublished();
+        }
+
         res.json({ message: `${ids.length} articles updated to ${status}` });
     } catch (error) {
         console.error("Bulk status update error:", error);
