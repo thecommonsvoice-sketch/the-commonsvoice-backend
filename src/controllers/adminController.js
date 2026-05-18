@@ -14,6 +14,7 @@ const updateUserRoleSchema = z.object({
 });
 const changeArticleStatusSchema = z.object({
     status: z.nativeEnum(ArticleStatus),
+    publishedAt: z.string().datetime().optional().or(z.null()),
 });
 // ====== USER MANAGEMENT ======
 export const createUser = async (req, res) => {
@@ -234,9 +235,15 @@ export const changeArticleStatus = async (req, res) => {
         return;
     }
     try {
+        const updateData = { status: parsed.data.status };
+        if (parsed.data.status === ArticleStatus.PUBLISHED) {
+            updateData.publishedAt = parsed.data.publishedAt ? new Date(parsed.data.publishedAt) : new Date();
+        } else if (parsed.data.status === ArticleStatus.DRAFT) {
+            updateData.publishedAt = null;
+        }
         const updated = await prisma.article.update({
             where: { id: articleId },
-            data: { status: parsed.data.status },
+            data: updateData,
         });
         res.json({
             message: "Article status updated successfully",
@@ -306,7 +313,7 @@ export const bulkDeleteArticles = async (req, res) => {
 };
 
 export const bulkChangeArticleStatus = async (req, res) => {
-    const { ids, status } = req.body;
+    const { ids, status, publishedAt } = req.body;
     if (!Array.isArray(ids) || ids.length === 0) {
         res.status(400).json({ message: "Invalid or empty article IDs" });
         return;
@@ -316,9 +323,15 @@ export const bulkChangeArticleStatus = async (req, res) => {
         return;
     }
     try {
+        const updateData = { status };
+        if (status === ArticleStatus.PUBLISHED) {
+            updateData.publishedAt = publishedAt ? new Date(publishedAt) : new Date();
+        } else if (status === ArticleStatus.DRAFT) {
+            updateData.publishedAt = null;
+        }
         await prisma.article.updateMany({
             where: { id: { in: ids } },
-            data: { status },
+            data: updateData,
         });
         res.json({ message: `${ids.length} articles updated successfully` });
     }

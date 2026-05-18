@@ -119,11 +119,15 @@ export const getArticles = async (req, res) => {
         
         if (isGuest) {
             where.status = ArticleStatus.PUBLISHED;
-        } else {
-            // Authenticated users (REPORTER, EDITOR, ADMIN) can filter by status
-            // If no status filter provided, show all statuses for their articles
-            if (status) {
-                where.status = status;
+        } else if (status) {
+            // Convert string status to Prisma enum
+            const statusUpper = String(status).toUpperCase();
+            if (statusUpper === "DRAFT") {
+                where.status = ArticleStatus.DRAFT;
+            } else if (statusUpper === "PUBLISHED") {
+                where.status = ArticleStatus.PUBLISHED;
+            } else if (statusUpper === "ARCHIVED") {
+                where.status = ArticleStatus.ARCHIVED;
             }
         }
         // Search filter
@@ -647,7 +651,7 @@ export const restoreArticle = async (req, res) => {
 // Update Article Status
 export const updateArticleStatus = async (req, res) => {
     const { id } = req.params;
-    const { status } = req.body;
+    const { status, publishedAt } = req.body;
     if (!req.user || (req.user.role !== "ADMIN" && req.user.role !== "EDITOR")) {
         res.status(403).json({ message: "Only admins and editors can update article status" });
         return;
@@ -657,9 +661,15 @@ export const updateArticleStatus = async (req, res) => {
         return;
     }
     try {
+        const updateData = { status };
+        if (status === ArticleStatus.PUBLISHED) {
+            updateData.publishedAt = publishedAt ? new Date(publishedAt) : new Date();
+        } else if (status === ArticleStatus.DRAFT) {
+            updateData.publishedAt = null;
+        }
         const article = await prisma.article.update({
             where: { id },
-            data: { status },
+            data: updateData,
             include: {
                 author: true,
                 category: true,
@@ -782,7 +792,7 @@ export const bulkDeleteArticles = async (req, res) => {
 
 // Bulk Update Article Status
 export const bulkUpdateArticleStatus = async (req, res) => {
-    const { ids, status } = req.body;
+    const { ids, status, publishedAt } = req.body;
     if (!Array.isArray(ids) || ids.length === 0) {
         return res.status(400).json({ message: "IDs must be a non-empty array" });
     }
@@ -795,15 +805,19 @@ export const bulkUpdateArticleStatus = async (req, res) => {
         const isEditor = req.user.role === "EDITOR";
 
         if (!isAdmin && !isEditor) {
-            // Reporters might be allowed to move their own to DRAFT or similar?
-            // But usually status change is an editor/admin action.
-            // Let's stick to Editor/Admin for now as per current single-article logic.
             return res.status(403).json({ message: "Only admins and editors can bulk update status" });
+        }
+
+        const updateData = { status };
+        if (status === ArticleStatus.PUBLISHED) {
+            updateData.publishedAt = publishedAt ? new Date(publishedAt) : new Date();
+        } else if (status === ArticleStatus.DRAFT) {
+            updateData.publishedAt = null;
         }
 
         await prisma.article.updateMany({
             where: { id: { in: ids } },
-            data: { status }
+            data: updateData
         });
 
         // Notify search engines when articles are bulk-published

@@ -46,6 +46,7 @@ model Article {
   createdAt       DateTime       @default(now())
   updatedAt       DateTime       @updatedAt
   status          ArticleStatus  @default(DRAFT)
+  publishedAt     DateTime?
   excerpt         String?
   metaDescription String?
   metaTitle       String?
