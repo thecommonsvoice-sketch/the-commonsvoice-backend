@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { addComment, getComments, getCommentsByUser, deleteComment, editComment, } from "../controllers/commentController.js";
+import { addComment, getComments, getCommentsByUser, deleteComment, editComment, replyToComment, } from "../controllers/commentController.js";
 import { authenticate } from "../middleware/auth.middleware.js";
 const router = Router();
 // Add a comment to an article
@@ -12,4 +12,7 @@ router.get("/user/:userId", authenticate, getCommentsByUser);
 router.delete("/:commentId", authenticate, deleteComment);
 // Edit a specific comment
 router.put("/:commentId", authenticate, editComment);
+
+// reply to a particular comment
+router.put("/:commentId/reply", authenticate, replyToComment);
 export default router;

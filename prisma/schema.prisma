@@ -67,17 +67,24 @@ model Article {
 }
 
 model Comment {
-  id        String   @id @default(cuid())
+  id        String  @id @default(cuid())
   content   String
   userId    String
   articleId String
+  parentId  String? // self reference
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  article   Article  @relation(fields: [articleId], references: [id], onDelete: Cascade)
+
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  article Article @relation(fields: [articleId], references: [id], onDelete: Cascade)
+
+  parent  Comment?  @relation("CommentReplies", fields: [parentId], references: [id])
+  replies Comment[] @relation("CommentReplies")
 
   @@index([userId])
   @@index([articleId])
+  @@index([parentId])
 }
 
 model Bookmark {

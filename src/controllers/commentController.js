@@ -126,3 +126,72 @@ export const editComment = async (req, res) => {
         res.status(500).json({ message: "Failed to edit comment" });
     }
 };
+
+// Reply to a comment (nested replies)
+export const replyToComment = async (req, res) => {
+    const { commentId } = req.params;
+    const { content } = req.body;
+    const userId = req.user?.userId;
+
+    if (!userId) {
+        res.status(401).json({ message: "Unauthorized" });
+        return;
+    }
+
+    if (!content || content.trim() === "") {
+        res.status(400).json({ message: "Reply content cannot be empty" });
+        return;
+    }
+
+    try {
+        // Verify parent comment exists and get its article context
+        const parentComment = await prisma.comment.findUnique({
+            where: { id: commentId },
+            select: {
+                id: true,
+                articleId: true,
+                userId: true,
+                content: true,
+            },
+        });
+
+        if (!parentComment) {
+            res.status(404).json({ message: "Parent comment not found" });
+            return;
+        }
+
+        if (parentComment.userId === userId) {
+            res.status(400).json({ message: "You cannot reply to your own comment" });
+            return;
+        }
+
+        // Create the reply comment with parent reference
+        const reply = await prisma.comment.create({
+            data: {
+                content,
+                userId,
+                articleId: parentComment.articleId,
+                parentId: commentId,
+            },
+            include: {
+                user: { select: { id: true, name: true, email: true } },
+                parent: {
+                    select: {
+                        id: true,
+                        content: true,
+                        user: { select: { id: true, name: true } },
+                    },
+                },
+            },
+        });
+
+        res.status(201).json({
+            message: "Reply added successfully",
+            reply,
+        });
+    }
+    catch (error) {
+        console.error("Error replying to comment:", error);
+        res.status(500).json({ message: "Failed to add reply to comment" });
+    }
+};
